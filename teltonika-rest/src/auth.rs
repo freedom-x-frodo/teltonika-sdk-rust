@@ -13,13 +13,13 @@ struct LoginResponse {
     token: String,
 }
 
-pub async fn authenticate(auth: AuthType, device: Device) -> Result<String, Box<dyn std::error::Error>> {
+pub async fn authenticate(auth: AuthType, device: Device, credentials: Credentials) -> Result<String, Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
     match auth {
         AuthType::Session(credentials) => {
             println!("Authenticating with session for user: {}", credentials.username);
             let url = format!("http://{}/api/login", device.ip);
-            let response = client.post(url).json(&device.credentials)
+            let response = client.post(url).json(&credentials)
                 .send()
                 .await?;
             if response.status().is_success() {

@@ -54,11 +54,10 @@ impl DeviceType {
 pub struct Device {
     pub device_type: DeviceType,
     pub ip: String,
-    pub credentials: Credentials,
 }
 
 impl Device {
-    pub fn new(model: String, firmware_version: String, ip: String, credentials: Credentials) -> Self {
+    pub fn new(model: String, firmware_version: String, ip: String) -> Self {
         if !DeviceType::validate_device_type(&model, &firmware_version) {
             panic!("Invalid device type: model '{}' with firmware version '{}'.
                     Available device types are: {:?}", 
@@ -73,7 +72,6 @@ impl Device {
                 firmware_version,
             },
             ip,
-            credentials
         }
     }
     fn validate_ip(ip: &str) -> bool {
