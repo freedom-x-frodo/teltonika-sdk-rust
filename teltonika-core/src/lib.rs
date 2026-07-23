@@ -1,17 +1,3 @@
-/*
-what is required to be configured in order to access the device?
-1) user name and password
-2) device type and device ip address
-
-
-auth type: Session
-
-
-init ->
-    DeviceType::RUTX50
-    DeviceIpAddress::some address
-    Credentials::new(username, password)
-*/
 pub mod config;
 pub mod device;
 pub mod error;
