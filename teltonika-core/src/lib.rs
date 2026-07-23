@@ -14,6 +14,9 @@ init ->
 */
 pub mod config;
 pub mod device;
+pub mod error;
+
+pub use error::{Result, TeltonikaError};
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right

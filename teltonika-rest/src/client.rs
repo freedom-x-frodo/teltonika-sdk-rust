@@ -7,6 +7,8 @@ use std::time::Duration;
 use teltonika_core::config::ConnConfig;
 use crate::auth::{AuthType, AuthCredentials, AuthState};
 use crate::utils::base64_encode;
+use teltonika_core::{Result, TeltonikaError};
+use crate::error::from_reqwest;
 
 #[derive(Deserialize)]
 struct LoginResponse {
@@ -24,15 +26,13 @@ struct ClientInner {
 }
 
 impl RestClient {
-    pub async fn connect(
-        config: ConnConfig,
-        auth_type: AuthType,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn connect(config: ConnConfig, auth_type: AuthType) -> Result<Self> {
 
         let http = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(15))
-            .build()?;
+            .build()
+            .map_err(from_reqwest)?;
 
         let base_url = format!("http://{}", config.ip); // TODO: scheme/TLS from config
 
@@ -46,10 +46,18 @@ impl RestClient {
                     .post(format!("{base_url}/api/login"))
                     .json(&credentials)
                     .send()
-                    .await?
-                    .error_for_status()?;
-
-                let token = response.json::<LoginResponse>().await?.token;
+                    .await
+                    .map_err(from_reqwest)?;
+                if response.status() == 401 || response.status() == 403 {
+                    return Err(TeltonikaError::AuthFailed {
+                        username: credentials.username,
+                    });
+                }
+                let token = response
+                    .json::<LoginResponse>()
+                    .await
+                    .map_err(from_reqwest)?
+                    .token;                
                 AuthState::Session { token }
             }
             AuthType::Basic => {
