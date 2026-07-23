@@ -11,29 +11,13 @@ use crate::utils::base64_encode;
 
 #[derive(Deserialize)]
 struct LoginResponse {
-    #[serde(default)]
-    token: Option<String>,
-    #[serde(default)]
-    data: Option<LoginData>,
+    data: LoginData,
 }
 
 #[derive(Deserialize)]
 struct LoginData {
-    token: Option<String>,
+    token: String,
     expires: Option<u64>, // TODO: use for re-auth scheduling
-}
-
-impl LoginResponse {
-    fn into_token(self) -> Result<String> {
-        self.data
-            .and_then(|d| d.token)
-            .or(self.token)
-            .ok_or_else(|| {
-                TeltonikaError::InvalidResponse(
-                    "login succeeded but no token in response".into(),
-                )
-            })
-    }
 }
 
 #[derive(Clone)]
@@ -83,7 +67,8 @@ impl RestClient {
                     .json::<LoginResponse>()
                     .await
                     .map_err(from_reqwest)?
-                    .into_token()?;
+                    .data
+                    .token;
 
                 AuthState::Session { token }
             }
