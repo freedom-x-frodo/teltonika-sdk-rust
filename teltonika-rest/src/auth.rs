@@ -17,6 +17,12 @@ impl FromStr for AuthType {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum AuthState {
+    Session { token: String },
+    Basic { encoded: String },
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AuthCredentials{
     pub username: String, 

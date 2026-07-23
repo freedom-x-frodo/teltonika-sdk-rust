@@ -2,9 +2,10 @@ use serde::Deserialize;
 use reqwest;
 use std::sync::Arc;
 use std::str::FromStr;
+use std::time::Duration;
 
 use teltonika_core::config::ConnConfig;
-use crate::auth::{AuthType, AuthCredentials};
+use crate::auth::{AuthType, AuthCredentials, AuthState};
 use crate::utils::base64_encode;
 
 #[derive(Deserialize)]
@@ -16,46 +17,56 @@ struct LoginResponse {
 pub struct RestClient {
     inner: Arc<ClientInner>,
 }
-pub struct ClientInner{
-    auth_type: AuthType,
-    token: String
+struct ClientInner {
+    http: reqwest::Client,
+    base_url: String,
+    auth: AuthState,
 }
 
 impl RestClient {
-    pub fn new(auth_type: String) -> Result<RestClient, ()> {
-        let auth_type = AuthType::from_str(&auth_type)?;
-        let token = String::new();
-        let inner = Arc::new(ClientInner{auth_type, token});
-        Ok(RestClient{ inner})
-    }
-    pub async fn auth(&self, config: ConnConfig) -> Result<(), Box<dyn std::error::Error>> {
-        let client = reqwest::Client::new();
-        let credentials = AuthCredentials{
-            username: config.username,
-            password: config.password
-        };
-        let url = format!("http://{}/api/login", config.ip);
-        match self.inner.auth_type {
-            AuthType::Session => {
-                println!("Authenticating with session for user: {}", credentials.username);
+    pub async fn connect(
+        config: ConnConfig,
+        auth_type: AuthType,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
 
-                let response = client.post(url).json(&credentials)
+        let http = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(15))
+            .build()?;
+
+        let base_url = format!("http://{}", config.ip); // TODO: scheme/TLS from config
+
+        let auth = match auth_type {
+            AuthType::Session => {
+                let credentials = AuthCredentials {
+                    username: config.username,
+                    password: config.password,
+                };
+                let response = http
+                    .post(format!("{base_url}/api/login"))
+                    .json(&credentials)
                     .send()
-                    .await?;
-                if response.status().is_success() {
-                    let token = response.error_for_status()?.json::<LoginResponse>().await?.token;                
-                    self.inner.token = token;
-                    Ok(())
-                } else {
-                    Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Session authentication failed.")))
-                }
-            },
+                    .await?
+                    .error_for_status()?;
+
+                let token = response.json::<LoginResponse>().await?.token;
+                AuthState::Session { token }
+            }
             AuthType::Basic => {
-                println!("Authenticating with basic auth for user: {}", credentials.username);
-                let encoded_credentials = base64_encode(&format!("{}:{}", credentials.username, credentials.password));
-                self.inner.token = encoded_credentials;
-                Ok(())
-            },
+                let encoded =
+                    base64_encode(&format!("{}:{}", config.username, config.password));
+                AuthState::Basic { encoded }
+            }
+        };
+
+        Ok(Self {
+            inner: Arc::new(ClientInner { http, base_url, auth }),
+        })
+    }
+    fn auth_header(&self) -> String {
+        match &self.inner.auth {
+            AuthState::Session { token } => format!("Bearer {token}"),
+            AuthState::Basic { encoded } => format!("Basic {encoded}"),
         }
     }
 
