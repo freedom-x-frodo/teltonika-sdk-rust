@@ -1,5 +1,27 @@
-use auth::Credentials;
 use std::collections::HashMap;
+use serde::Serialize;
+
+#[derive(Serialize)]
+pub struct Credentials {
+    pub username: String,
+    pub password: String,
+}
+
+impl Credentials {
+    pub fn from_json(json: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let credentials: Credentials = serde_json::from_str(json)?;
+        Ok(credentials)
+    }
+    pub fn from_yaml(yaml: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let credentials: Credentials = serde_yaml::from_str(yaml)?;
+        Ok(credentials)
+    }
+    pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
+        let username = std::env::var("DEVICE_USERNAME")?;
+        let password = std::env::var("DEVICE_PASSWORD")?;
+        Ok(Credentials { username, password })
+    }
+}
 
 struct DeviceType {
     pub model: String,
@@ -32,10 +54,11 @@ impl DeviceType {
 pub struct Device {
     pub device_type: DeviceType,
     pub ip: String,
+    pub credentials: Credentials,
 }
 
 impl Device {
-    pub fn new(model: String, firmware_version: String, ip: String) -> Self {
+    pub fn new(model: String, firmware_version: String, ip: String, credentials: Credentials) -> Self {
         if !DeviceType::validate_device_type(&model, &firmware_version) {
             panic!("Invalid device type: model '{}' with firmware version '{}'.
                     Available device types are: {:?}", 
@@ -50,6 +73,7 @@ impl Device {
                 firmware_version,
             },
             ip,
+            credentials
         }
     }
     fn validate_ip(ip: &str) -> bool {

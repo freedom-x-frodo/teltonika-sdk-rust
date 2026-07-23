@@ -9,3 +9,4 @@ teltonika-core.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 tokio.workspace = true
+base64 = {version = "0.22.1"}
