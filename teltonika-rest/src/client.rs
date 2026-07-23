@@ -1,24 +1,46 @@
-use serde::Deserialize;
-use reqwest;
 use std::sync::Arc;
-use std::str::FromStr;
 use std::time::Duration;
 
+use serde::Deserialize;
 use teltonika_core::config::ConnConfig;
-use crate::auth::{AuthType, AuthCredentials, AuthState};
-use crate::utils::base64_encode;
 use teltonika_core::{Result, TeltonikaError};
+
+use crate::auth::{AuthCredentials, AuthState, AuthType};
 use crate::error::from_reqwest;
+use crate::utils::base64_encode;
 
 #[derive(Deserialize)]
 struct LoginResponse {
-    token: String,
+    #[serde(default)]
+    token: Option<String>,
+    #[serde(default)]
+    data: Option<LoginData>,
+}
+
+#[derive(Deserialize)]
+struct LoginData {
+    token: Option<String>,
+    expires: Option<u64>, // TODO: use for re-auth scheduling
+}
+
+impl LoginResponse {
+    fn into_token(self) -> Result<String> {
+        self.data
+            .and_then(|d| d.token)
+            .or(self.token)
+            .ok_or_else(|| {
+                TeltonikaError::InvalidResponse(
+                    "login succeeded but no token in response".into(),
+                )
+            })
+    }
 }
 
 #[derive(Clone)]
 pub struct RestClient {
     inner: Arc<ClientInner>,
 }
+
 struct ClientInner {
     http: reqwest::Client,
     base_url: String,
@@ -27,14 +49,14 @@ struct ClientInner {
 
 impl RestClient {
     pub async fn connect(config: ConnConfig, auth_type: AuthType) -> Result<Self> {
-
         let http = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(15))
+            .danger_accept_invalid_certs(config.accept_invalid_certs)
             .build()
             .map_err(from_reqwest)?;
 
-        let base_url = format!("http://{}", config.ip); // TODO: scheme/TLS from config
+        let base_url = format!("https://{}", config.ip);
 
         let auth = match auth_type {
             AuthType::Session => {
@@ -42,22 +64,27 @@ impl RestClient {
                     username: config.username,
                     password: config.password,
                 };
+
                 let response = http
                     .post(format!("{base_url}/api/login"))
                     .json(&credentials)
                     .send()
                     .await
                     .map_err(from_reqwest)?;
+
                 if response.status() == 401 || response.status() == 403 {
                     return Err(TeltonikaError::AuthFailed {
                         username: credentials.username,
                     });
                 }
+                let response = response.error_for_status().map_err(from_reqwest)?;
+
                 let token = response
                     .json::<LoginResponse>()
                     .await
                     .map_err(from_reqwest)?
-                    .token;                
+                    .into_token()?;
+
                 AuthState::Session { token }
             }
             AuthType::Basic => {
@@ -71,12 +98,11 @@ impl RestClient {
             inner: Arc::new(ClientInner { http, base_url, auth }),
         })
     }
+
     fn auth_header(&self) -> String {
         match &self.inner.auth {
             AuthState::Session { token } => format!("Bearer {token}"),
             AuthState::Basic { encoded } => format!("Basic {encoded}"),
         }
     }
-
 }
-
