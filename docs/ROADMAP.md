@@ -1,83 +1,146 @@
-# tektonika-rs — Roadmap: Deferred Write-Path Features
+# tektonika-rs — Roadmap
 
-Status: deferred from v0.1. The v0.1 SDK surface is **read-only** (link telemetry,
-device health, data usage, QoS verification). This document plans the two write
-capabilities that were consciously excluded, and the requirements they must meet
-before implementation.
+SDK for Teltonika RutOS devices (RUTX50). Consumed by the B2W teleop stack; the
+router is the robot's **only WAN path** (5G behind CGNAT).
 
-Rationale for deferral: both features mutate a router that is the robot's **only
-WAN path** (5G behind CGNAT). A bad write doesn't degrade the system — it
-disconnects it, with no inbound path for remote recovery. Write access therefore
-needs safeguards that the current SDK (no re-auth, no request retry, no
-confirmation model) cannot yet provide.
+API contract is pinned to the vendored spec: `specs/RUTX50_7.23.7_v1.15.1.json`
+(Vuci API 1.15.1). All paths below are relative to `https://<host>/api`.
+
+**v0.1 scope: read-only.** Link telemetry, device health, data usage, QoS
+verification. Write paths are deferred — see §4.
 
 ---
 
-## 1. Recovery Actions (modem restart, device reboot)
+## 1. Implementation sequence
 
-### Purpose
-Remotely recover a wedged modem or router without a field visit.
+Spec-driven, in order. Each item is verified against the vendored spec before
+coding.
 
-### Endpoints (verify per firmware before implementation)
-- Modem/mobile connection restart (least destructive, first to implement)
-- Full device reboot (last resort)
+1. ~~`LoginResponse` → verified shape (`data.token`)~~ — done
+2. **`DeviceStatus` restructure.** `GET /system/device/status` returns nested
+   objects, not a flat payload: identity under `static` (`device_name`, `model`,
+   `fw_version`, `hostname`, ...) and `mnfinfo` (`serial`, `mac`, `hwver`).
+   Current flat struct will not deserialize.
+3. **`api/` namespace skeleton.** Accessor pattern — `client.system()`,
+   `client.mobile()` returning borrowing structs; `RestClient` keeps only
+   transport (auth, verb helpers, envelope, error mapping). Migrate
+   `device_status` out of `client.rs`. Prevents the flat-impl bloat that a
+   976-endpoint API guarantees.
+4. **`mobile` namespace.**
+   - `GET /modems/status` — array, two schema variants (full / offline stub).
+     Type ~15 of 84 fields: `rsrp`, `rsrq`, `sinr`, `rssi`, `ntype`, `operator`,
+     `state`, `conntype`, `simstate`, `active_sim`, `txbytes`, `rxbytes`,
+     `temperature`, `id`, `model`. All `Option` — covers both variants.
+   - `GET /internet_connection/status` — `{dns_status, ipv4_status, ipv6_status}`;
+     reachability, distinct from radio registration.
+   - `GET /failover/status` — `{interface_name}`; active WAN.
+5. **Data usage.** Two overlapping families in the spec:
+   `/data_usage/{interval}/...` (per-modem, per-SIM) vs
+   `/network_usage/metrics/{day|week|month|total}/status`. Decide after dumping
+   both from a live device. Per-SIM variant likely fits fleet cost tracking.
+6. **QoS read/verify.** `GET /qos/interfaces/config`, `GET /qos/rules/config`,
+   `GET /qos/rules/options`. Rule item schema is dynamic (uci-backed) and does
+   not resolve statically in the spec — **requires a live device dump before
+   typing.** Verify-only: report drift from the expected policy, do not write.
 
-### Key risk
-The action severs the link it is commanded through. The HTTP response may never
-arrive even on success; loss of connectivity is the *expected* outcome, not an
-error. Timeout/error handling semantics are inverted relative to every read call.
+## 2. Blocking / parallel work
 
-### Requirements before implementation
-1. **Session re-auth must exist first.** Recovery is needed most during flaky
-   connectivity, exactly when the 5-min session token has likely expired.
-   Blocked by: token-expiry/re-auth work (`RwLock<AuthState>` + retry-on-401).
-2. **Escalation order in API design.** Modem restart and device reboot are
-   separate methods; docs must push callers to the least destructive option.
+- **Hardware verification.** Run the vertical slice (connect → auth → call)
+  against a real RUTX50 before §1.4 expands. Validates TLS policy against the
+  device's self-signed cert, the `success`/`data` envelope, and login in one
+  shot. Everything downstream assumes these hold.
+- **Token re-auth.** Session token expires after 5 minutes.
+  `RwLock<AuthState>` + retry-once-on-401, storing credentials for re-login;
+  `GET /session/status` (`{active, username, group}`) as the probe. Also
+  replaces the stubbed 401 branch in `get()`, which currently returns
+  `AuthFailed` with an empty username — wrong story for an expiry.
+  **Prerequisite for everything in §4.**
+- **Vendor the spec** into `specs/` so firmware bumps become reviewable diffs.
+
+## 3. Housekeeping
+
+- `ConnConfig.ip` → `host` (may be hostname, may carry port). Bundle with the
+  scheme/port-in-config decision.
+- Note the 2FA limitation: login response carries `2fa_login`; if 2FA is
+  enabled on a fleet router, single-step login breaks.
+- Undecided: codegen of payload structs from the spec vs hand-writing. Cheap
+  now that the spec is in hand; revisit if the endpoint count grows.
+- Out of scope: GNSS (robot has its own localization), SMS (out-of-band
+  alerting — defer until there's a plan for it).
+
+---
+
+## 4. Deferred: write-path features
+
+Rationale for deferral: both mutate the robot's only WAN path. A bad write
+doesn't degrade the system — it disconnects it, with no inbound path for remote
+recovery. Write access needs safeguards the current SDK (no re-auth, no request
+retry, no confirmation model) cannot yet provide.
+
+### 4.1 Recovery actions
+
+**Purpose.** Remotely recover a wedged modem or router without a field visit.
+
+**Endpoints (confirmed present in the vendored spec).** Three-step escalation
+ladder, least destructive first:
+
+1. `POST /modems/{id}/actions/restart_connection` — re-establish the data
+   connection only.
+2. `POST /modems/{id}/actions/reboot` — modem power-cycle.
+3. `POST /system/actions/reboot` — full device reboot, last resort.
+
+Both modem actions take an `id` from `GET /modems/status` — the recovery API
+cannot be a bare no-arg call.
+
+**Key risk.** The action severs the link it is commanded through. The HTTP
+response may never arrive even on success; loss of connectivity is the
+*expected* outcome, not an error. Timeout and error semantics are inverted
+relative to every read call.
+
+**Requirements before implementation.**
+
+1. **Session re-auth must exist first** (§2). Recovery is needed most during
+   flaky connectivity — exactly when the 5-minute token has expired.
+2. **Escalation order encoded in the API.** Three separate methods; naming and
+   docs must push callers to the least destructive option that fits.
 3. **Explicit-confirmation API shape.** Destructive calls must not be
-   triggerable by accident, e.g. a required marker argument or a distinct
-   `RecoveryApi` accessor — decide during design review.
-4. **Fire-and-forget semantics.** Define a dedicated result type: "command
-   accepted / link dropped as expected / genuine failure". Do not reuse
-   `TeltonikaError::Network` for the expected disconnect.
+   triggerable by accident — a required marker argument or a distinct
+   `RecoveryApi` accessor. Decide at design review.
+4. **Fire-and-forget semantics.** Dedicated result type distinguishing
+   "command accepted / link dropped as expected / genuine failure". Do not
+   reuse `TeltonikaError::Network` for the expected disconnect.
 5. **Post-action verification helper.** Poll device uptime after reconnect to
    confirm the reboot actually happened.
-6. **Fleet-layer guardrails (out of SDK scope, document only):** rate-limit
-   reboots per robot per hour; never auto-reboot while a delivery is active.
+6. **Fleet-layer guardrails (out of SDK scope, document only).** Rate-limit
+   reboots per robot per hour; never auto-reboot during an active delivery.
 
----
+### 4.2 QoS / DSCP configuration (write)
 
-## 2. QoS / DSCP Configuration (write)
+**Purpose.** Provision the policy that prioritizes the teleop control/heartbeat
+channel above video — per system spec, the deadman command must win on a
+congested uplink.
 
-### Purpose
-Provision the QoS policy that prioritizes the teleop control/heartbeat channel
-above video (per system spec: deadman must win on a congested uplink).
+**v0.1 stance.** Read/verify only (§1.6). Provisioning stays manual.
 
-### v0.1 stance
-Read/verify only: the SDK checks that the expected QoS rules are present and
-reports drift. Provisioning remains manual.
+**Key risk.** QoS rules are traffic-filtering config. A malformed rule can
+throttle or drop the control channel itself — silently, and only under
+congestion, making the failure hard to attribute. RutOS config writes also
+require an apply/commit step; a partial write leaves an inconsistent state.
 
-### Key risk
-QoS rules are traffic-filtering config. A malformed rule can throttle or drop
-the control channel itself — silently, and only under congestion, making the
-failure hard to attribute. Config writes on RutOS also typically require an
-apply/commit step; a partial write leaves the router in an inconsistent state.
+**Requirements before implementation.**
 
-### Requirements before implementation
 1. **Read/verify path proven in production first.** The verify code defines the
    canonical rule set; write is "make it so" against the same model.
-2. **Declarative, not imperative API.** Caller supplies a full desired QoS
-   policy (typed struct, versioned); SDK diffs against device state and applies.
-   No "add rule" / "delete rule" primitives — they invite drift.
-3. **Transactional apply.** Investigate RutOS config apply/rollback semantics
-   (uci-style commit, confirm-timeout if available). If the device supports
-   apply-with-rollback-timer, use it: a write that breaks connectivity
-   auto-reverts.
-4. **Post-apply verification.** Re-read config and compare to intent; report
-   drift as a typed error.
+2. **Declarative, not imperative API.** Caller supplies a full desired policy
+   (typed, versioned); SDK diffs against device state and applies. No
+   add-rule / delete-rule primitives — they invite drift.
+3. **Transactional apply.** Investigate RutOS apply/rollback semantics
+   (uci-style commit, confirm-timeout). If apply-with-rollback-timer exists,
+   use it: a write that breaks connectivity auto-reverts.
+4. **Post-apply verification.** Re-read config, compare to intent, report drift
+   as a typed error.
 5. **Dry-run mode.** Diff-only call returning what *would* change, for fleet
    rollout tooling.
-6. **Firmware-version gating.** QoS endpoint schema varies across RutOS
-   versions; validate firmware before writing (revisits the deleted
-   `DeviceType` validation idea — with a real consumer this time).
-
----
+6. **Firmware-version gating.** QoS schema varies across RutOS versions;
+   validate firmware before writing. Revisits the deleted `DeviceType`
+   validation idea — with a real consumer this time.
