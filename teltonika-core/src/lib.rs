@@ -12,7 +12,7 @@ init ->
     DeviceIpAddress::some address
     Credentials::new(username, password)
 */
-pub mod auth;
+pub mod config;
 pub mod device;
 
 pub fn add(left: u64, right: u64) -> u64 {
