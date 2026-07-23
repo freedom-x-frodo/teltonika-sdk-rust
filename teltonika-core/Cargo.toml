@@ -8,4 +8,4 @@ license.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 serde_json={version="1.0.151"}
-serde_yaml={version>="0.9.33"}
+serde_yaml={version="0.9.33"}
