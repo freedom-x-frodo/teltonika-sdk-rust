@@ -13,3 +13,7 @@ serde = { version = "1", features = ["derive"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 tokio = { version = "1", features = ["rt", "macros"] }
 teltonika-core = { path = "teltonika-core" }
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"  
