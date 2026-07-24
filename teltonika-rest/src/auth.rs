@@ -20,13 +20,13 @@ impl FromStr for AuthType {
 }
 
 #[derive(Debug, Clone)]
-pub enum AuthState {
+pub(crate) enum AuthState {
     Session { token: String },
     Basic { encoded: String },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct AuthCredentials{
+pub(crate) struct AuthCredentials{
     pub username: String, 
     pub password: String
 }
