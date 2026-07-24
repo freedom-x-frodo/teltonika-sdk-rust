@@ -2,12 +2,23 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
+
 use teltonika_core::config::ConnConfig;
 use teltonika_core::{Result, TeltonikaError};
+
 
 use crate::auth::{AuthCredentials, AuthState, AuthType};
 use crate::error::from_reqwest;
 use crate::utils::base64_encode;
+use crate::api::system::SystemApi;
+
+
+#[derive(Deserialize)]
+struct Envelope<T> {
+    success: bool,
+    data: Option<T>,
+}
 
 #[derive(Deserialize)]
 struct LoginResponse {
@@ -89,5 +100,34 @@ impl RestClient {
             AuthState::Session { token } => format!("Bearer {token}"),
             AuthState::Basic { encoded } => format!("Basic {encoded}"),
         }
+    }
+    pub(crate) async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+        let response = self
+            .inner
+            .http
+            .get(format!("{}/api{path}", self.inner.base_url))
+            .header(reqwest::header::AUTHORIZATION, self.auth_header())
+            .send()
+            .await
+            .map_err(from_reqwest)?;
+
+        // TODO(re-auth)
+        let status = response.status();
+        if status == 401 || status == 403 {
+            return Err(TeltonikaError::Http { status: status.as_u16() });
+        }
+        let response = response.error_for_status().map_err(from_reqwest)?;
+
+        let envelope: Envelope<T> = response.json().await.map_err(from_reqwest)?;
+
+        if !envelope.success {
+            return Err(TeltonikaError::InvalidResponse(format!(
+                "device reported failure for GET {path}"
+            )));
+        }
+
+        envelope.data.ok_or_else(|| {
+            TeltonikaError::InvalidResponse(format!("missing `data` in response to GET {path}"))
+        })
     }
 }
