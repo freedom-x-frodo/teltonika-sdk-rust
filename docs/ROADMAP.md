@@ -17,67 +17,46 @@ Spec-driven, in order. Each item is verified against the vendored spec before
 coding.
 
 1. ~~`LoginResponse` → verified shape (`data.token`)~~ — done
-2. **`DeviceStatus` restructure.** `GET /system/device/status` returns nested
-   objects, not a flat payload: identity under `static` (`device_name`, `model`,
-   `fw_version`, `hostname`, ...) and `mnfinfo` (`serial`, `mac`, `hwver`).
-   Current flat struct will not deserialize.
-3. **`api/` namespace skeleton.** Accessor pattern — `client.system()`,
-   `client.mobile()` returning borrowing structs; `RestClient` keeps only
-   transport (auth, verb helpers, envelope, error mapping). Migrate
-   `device_status` out of `client.rs`. Prevents the flat-impl bloat that a
-   976-endpoint API guarantees.
-4. **`mobile` namespace.**
-   - `GET /modems/status` — array, two schema variants (full / offline stub).
-     Type ~15 of 84 fields: `rsrp`, `rsrq`, `sinr`, `rssi`, `ntype`, `operator`,
-     `state`, `conntype`, `simstate`, `active_sim`, `txbytes`, `rxbytes`,
-     `temperature`, `id`, `model`. All `Option` — covers both variants.
+2. ~~**`api/` namespace skeleton.** Accessor pattern — `client.system()`,~~
+   ~~`client.mobile()` returning borrowing structs; `RestClient` keeps only~~
+   ~~transport (auth, verb helpers, envelope, error mapping). Migrate~~
+   ~~`device_status` out of `client.rs`. Prevents the flat-impl bloat that a~~
+   ~~976-endpoint API guarantees.~~
+3. **`modems` namespace.**
+   ~~- `GET /modems/status` — array, two schema variants (full / offline stub).~~
+     ~~Type ~15 of 84 fields: `rsrp`, `rsrq`, `sinr`, `rssi`, `ntype`, `operator`,~~
+     ~~`state`, `conntype`, `simstate`, `active_sim`, `txbytes`, `rxbytes`,~~
+     ~~`temperature`, `id`, `model`. All `Option` — covers both variants.~~
    - `GET /internet_connection/status` — `{dns_status, ipv4_status, ipv6_status}`;
      reachability, distinct from radio registration.
    - `GET /failover/status` — `{interface_name}`; active WAN.
-5. **Data usage.** Two overlapping families in the spec:
+4. **Data usage.** Two overlapping families in the spec:
    `/data_usage/{interval}/...` (per-modem, per-SIM) vs
    `/network_usage/metrics/{day|week|month|total}/status`. Decide after dumping
    both from a live device. Per-SIM variant likely fits fleet cost tracking.
-6. **QoS read/verify.** `GET /qos/interfaces/config`, `GET /qos/rules/config`,
+5. **QoS read/verify.** `GET /qos/interfaces/config`, `GET /qos/rules/config`,
    `GET /qos/rules/options`. Rule item schema is dynamic (uci-backed) and does
    not resolve statically in the spec — **requires a live device dump before
    typing.** Verify-only: report drift from the expected policy, do not write.
 
 ## 2. Blocking / parallel work
 
-- **Hardware verification.** Run the vertical slice (connect → auth → call)
-  against a real RUTX50 before §1.4 expands. Validates TLS policy against the
-  device's self-signed cert, the `success`/`data` envelope, and login in one
-  shot. Everything downstream assumes these hold.
 - **Token re-auth.** Session token expires after 5 minutes.
   `RwLock<AuthState>` + retry-once-on-401, storing credentials for re-login;
   `GET /session/status` (`{active, username, group}`) as the probe. Also
   replaces the stubbed 401 branch in `get()`, which currently returns
   `AuthFailed` with an empty username — wrong story for an expiry.
   **Prerequisite for everything in §4.**
-- **Vendor the spec** into `specs/` so firmware bumps become reviewable diffs.
+- ~~**Vendor the spec** into `specs/` so firmware bumps become reviewable diffs.~~
 
-## 3. Housekeeping
-
-- `ConnConfig.ip` → `host` (may be hostname, may carry port). Bundle with the
-  scheme/port-in-config decision.
-- Note the 2FA limitation: login response carries `2fa_login`; if 2FA is
-  enabled on a fleet router, single-step login breaks.
-- Undecided: codegen of payload structs from the spec vs hand-writing. Cheap
-  now that the spec is in hand; revisit if the endpoint count grows.
-- Out of scope: GNSS (robot has its own localization), SMS (out-of-band
-  alerting — defer until there's a plan for it).
-
----
-
-## 4. Deferred: write-path features
+## 3. Deferred: write-path features
 
 Rationale for deferral: both mutate the robot's only WAN path. A bad write
 doesn't degrade the system — it disconnects it, with no inbound path for remote
 recovery. Write access needs safeguards the current SDK (no re-auth, no request
 retry, no confirmation model) cannot yet provide.
 
-### 4.1 Recovery actions
+### 3.1 Recovery actions
 
 **Purpose.** Remotely recover a wedged modem or router without a field visit.
 
@@ -114,7 +93,7 @@ relative to every read call.
 6. **Fleet-layer guardrails (out of SDK scope, document only).** Rate-limit
    reboots per robot per hour; never auto-reboot during an active delivery.
 
-### 4.2 QoS / DSCP configuration (write)
+### 3.2 QoS / DSCP configuration (write)
 
 **Purpose.** Provision the policy that prioritizes the teleop control/heartbeat
 channel above video — per system spec, the deadman command must win on a
