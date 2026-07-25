@@ -23,51 +23,50 @@ impl<'a> ModemsApi<'a> {
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct ModemStatus {
-    state: Option<String>,
-    id: Option<String>,
-    ntype: Option<String>,             // network type, e.g. "5G-NSA"
+    pub state: Option<String>,
+    pub id: Option<String>,
+    pub ntype: Option<String>,             // network type, e.g. "5G-NSA"
     provider: Option<String>,
-    conntype: Option<String>,
-    band: Option<String>,
+    pub conntype: Option<String>,
+    pub band: Option<String>,
     cellid: Option<String>,
-    imsi: Option<String>,              // subscriber id, tied to SIM - sensitive
+    pub imsi: Option<String>,              // subscriber id, tied to SIM - sensitive
 
-    // rolled-up signal; unit unconfirmed (bars vs dBm) - check live dump
-    signal: Option<i16>,
-    signal_quality: Option<i16>,       // separate from `signal`; likely 0-100%
-    rsrp: Option<i16>,                 // reference signal received power, dBm
-    rsrq: Option<i16>,                 // reference signal received quality, dB
-    rssi: Option<i16>,                 // received signal strength, dBm
+    pub signal: Option<i16>,               // probably in dB
+    pub signal_quality: Option<i16>,       // separate from `signal`; idk the unit for now. need to check the docs
+    pub rsrp: Option<i16>,                 // reference signal received power, dBm
+    pub rsrq: Option<i16>,                 // reference signal received quality, dB
+    pub rssi: Option<i16>,                 // received signal strength, dBm
 
-    temperature: Option<f32>,          // Celsius; may arrive x10 - verify
+    pub temperature: Option<f32>,          // Celsius; may arrive x10 - need to verify from docs
 
-    data_conn_state: Option<String>,
-    data_conn_state_id: Option<i16>,   // machine-readable pair of the above
+    pub data_conn_state: Option<String>,
+    pub data_conn_state_id: Option<i16>,   // machine-readable pair of the above
     busy_state: Option<String>,
     busy_state_id: Option<i16>,
-    mobile_stage: Option<i16>,
+    pub mobile_stage: Option<i16>,
 
     baudrate: Option<i32>,
     rxbytes: Option<i64>,
     txbytes: Option<i64>,
 
-    ca_signal: Option<Vec<SignalInfo>>, // per carrier-aggregation component
-    cell_info: Option<Vec<CellInfo>>,
+    pub ca_signal: Option<Vec<SignalInfo>>, // per carrier-aggregation component
+    cell_info: Option<Vec<CellInfo>>, //idk if need to use it
 }
 
 // One component carrier under carrier aggregation. `primary` marks the anchor.
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
-struct SignalInfo {
-    primary: Option<bool>,
-    band: Option<String>,
-    bandwidth: Option<String>,
-    frequency: Option<i32>,
-    pcid: Option<i32>,                 // physical cell id
-    rssi: Option<i16>,
-    rsrp: Option<i16>,
-    rsrq: Option<i16>,
-    sinr: Option<i16>,                 // signal-to-interference+noise, dB
+pub struct SignalInfo {
+    pub primary: Option<bool>,
+    pub band: Option<String>,
+    pub bandwidth: Option<String>,
+    pub frequency: Option<i32>,
+    pub pcid: Option<i32>,                 // physical cell id
+    pub rssi: Option<i16>,
+    pub rsrp: Option<i16>,
+    pub rsrq: Option<i16>,
+    pub sinr: Option<i16>,                 // signal-to-interference+noise, dB
 }
 
 // Serving-cell fields; the rest of the schema comes back N/A on LTE.
