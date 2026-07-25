@@ -21,6 +21,7 @@ impl<'a> ModemsApi<'a> {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct ModemStatus {
     state: Option<String>,
     id: Option<String>,
@@ -56,6 +57,7 @@ pub struct ModemStatus {
 
 // One component carrier under carrier aggregation. `primary` marks the anchor.
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct SignalInfo {
     primary: Option<bool>,
     band: Option<String>,
@@ -70,6 +72,7 @@ struct SignalInfo {
 
 // Serving-cell fields; the rest of the schema comes back N/A on LTE.
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct CellInfo {
     cellid: Option<String>,
     mnc: Option<String>,               // mobile network code (carrier)

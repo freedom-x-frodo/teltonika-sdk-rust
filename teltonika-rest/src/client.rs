@@ -11,8 +11,6 @@ use teltonika_core::{Result, TeltonikaError};
 use crate::auth::{AuthCredentials, AuthState, AuthType};
 use crate::error::from_reqwest;
 use crate::utils::base64_encode;
-use crate::api::system::SystemApi;
-
 
 #[derive(Deserialize)]
 struct Envelope<T> {
@@ -28,6 +26,7 @@ struct LoginResponse {
 #[derive(Deserialize)]
 struct LoginData {
     token: String,
+    #[allow(dead_code)]
     expires: Option<u64>, // TODO: use for re-auth scheduling
 }
 
