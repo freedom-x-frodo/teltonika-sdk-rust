@@ -6,7 +6,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY teltonika-core/ teltonika-core/
 COPY teltonika-rest/ teltonika-rest/
 
-RUN cargo build --release --locked --example probe
+RUN cargo build --release --locked --examples
 
 # ---- runtime ----
 FROM debian:bookworm-slim
@@ -16,4 +16,4 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /src/target/release/examples/probe /usr/local/bin/probe
+COPY --from=build /src/target/release/examples /usr/local/bin/example
