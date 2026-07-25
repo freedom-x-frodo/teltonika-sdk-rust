@@ -17,4 +17,3 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /src/target/release/examples/probe /usr/local/bin/probe
-ENTRYPOINT ["/usr/local/bin/probe"]
