@@ -8,7 +8,7 @@ use teltonika_core::config::ConnConfig;
 use teltonika_core::{Result, TeltonikaError};
 
 
-use crate::auth::{AuthCredentials, AuthState, AuthType};
+use crate::auth::{AuthCredentials, AuthState, AuthType, LoginData, LoginResponse};
 use crate::error::from_reqwest;
 use crate::utils::base64_encode;
 
@@ -18,17 +18,7 @@ struct Envelope<T> {
     data: Option<T>,
 }
 
-#[derive(Deserialize)]
-struct LoginResponse {
-    data: LoginData,
-}
 
-#[derive(Deserialize)]
-struct LoginData {
-    token: String,
-    #[allow(dead_code)]
-    expires: Option<u64>, // TODO: use for re-auth scheduling
-}
 
 #[derive(Clone)]
 pub struct RestClient {
@@ -73,14 +63,13 @@ impl RestClient {
                 }
                 let response = response.error_for_status().map_err(from_reqwest)?;
 
-                let token = response
+                let login_data = response
                     .json::<LoginResponse>()
                     .await
                     .map_err(from_reqwest)?
-                    .data
-                    .token;
-
-                AuthState::Session { token }
+                    .data;
+                
+                AuthState::Session {login_data}
             }
             AuthType::Basic => {
                 let encoded =
@@ -96,7 +85,9 @@ impl RestClient {
 
     fn auth_header(&self) -> String {
         match &self.inner.auth {
-            AuthState::Session { token } => format!("Bearer {token}"),
+            AuthState::Session { login_data } => {
+                let token = &login_data.token;
+                format!("Bearer {token}")},
             AuthState::Basic { encoded } => format!("Basic {encoded}"),
         }
     }

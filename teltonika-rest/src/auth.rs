@@ -1,6 +1,18 @@
 use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use teltonika_core::{Result,TeltonikaError};
+
+#[derive(Deserialize)]
+pub(crate) struct LoginResponse {
+    pub data: LoginData,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub(crate) struct LoginData {
+    pub token: String,
+    pub expires: Option<u64>, // TODO: use for re-auth scheduling
+}
+
 pub enum AuthType {
     Session,
     Basic,
@@ -21,11 +33,11 @@ impl FromStr for AuthType {
 
 #[derive(Debug, Clone)]
 pub(crate) enum AuthState {
-    Session { token: String },
+    Session { login_data: LoginData },
     Basic { encoded: String },
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub(crate) struct AuthCredentials{
     pub username: String, 
     pub password: String
