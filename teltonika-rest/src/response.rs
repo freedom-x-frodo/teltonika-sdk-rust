@@ -23,3 +23,30 @@ impl<T> Envelope<T> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unwraps_success() {
+        let env = Envelope { success: true, data: Some(7u32) };
+        assert_eq!(env.into_data("GET /x").unwrap(), 7);
+    }
+
+    #[test]
+    fn rejects_failure_flag() {
+        let env = Envelope::<u32> { success: false, data: None };
+        let err = env.into_data("GET /x").unwrap_err().to_string();
+        assert!(err.contains("GET /x"));
+    }
+
+    #[test]
+    fn rejects_missing_data() {
+        let env = Envelope::<u32> { success: true, data: None };
+        assert!(matches!(
+            env.into_data("GET /x"),
+            Err(TeltonikaError::InvalidResponse(_))
+        ));
+    }
+}

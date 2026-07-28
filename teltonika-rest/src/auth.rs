@@ -135,3 +135,56 @@ impl AuthHeader {
         Ok(())
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn session(expires_in: u64) -> AuthHeader {
+        AuthHeader::Session {
+            token: "tok".into(),
+            expires_at: Instant::now() + Duration::from_secs(expires_in),
+            credentials: AuthCredentials {
+                username: "admin".into(),
+                password: "pw".into(),
+            },
+        }
+    }
+
+    #[test]
+    fn auth_type_parses() {
+        assert!(matches!("session".parse::<AuthType>(), Ok(AuthType::Session)));
+        assert!(matches!("basic".parse::<AuthType>(), Ok(AuthType::Basic)));
+        assert!(matches!(
+            "ldap".parse::<AuthType>(),
+            Err(TeltonikaError::InvalidConfig(_))
+        ));
+    }
+
+    #[test]
+    fn renders_header_values() {
+        assert_eq!(session(300).value(), "Bearer tok");
+        assert_eq!(
+            AuthHeader::basic("admin".into(), "pw".into()).value(),
+            "Basic YWRtaW46cHc="
+        );
+    }
+
+    #[test]
+    fn staleness_respects_margin() {
+        let margin = Duration::from_secs(30);
+        assert!(!session(300).is_stale(margin));
+        assert!(session(10).is_stale(margin));
+        assert!(session(0).is_stale(margin));
+        // Basic credentials never expire.
+        assert!(!AuthHeader::basic("admin".into(), "pw".into()).is_stale(margin));
+    }
+
+    #[test]
+    fn only_sessions_refresh() {
+        assert!(session(300).can_refresh());
+        assert!(!AuthHeader::basic("admin".into(), "pw".into()).can_refresh());
+        assert_eq!(AuthHeader::basic("admin".into(), "pw".into()).username(), "admin");
+    }
+}
