@@ -136,7 +136,6 @@ impl AuthHeader {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,7 +153,10 @@ mod tests {
 
     #[test]
     fn auth_type_parses() {
-        assert!(matches!("session".parse::<AuthType>(), Ok(AuthType::Session)));
+        assert!(matches!(
+            "session".parse::<AuthType>(),
+            Ok(AuthType::Session)
+        ));
         assert!(matches!("basic".parse::<AuthType>(), Ok(AuthType::Basic)));
         assert!(matches!(
             "ldap".parse::<AuthType>(),
@@ -185,6 +187,9 @@ mod tests {
     fn only_sessions_refresh() {
         assert!(session(300).can_refresh());
         assert!(!AuthHeader::basic("admin".into(), "pw".into()).can_refresh());
-        assert_eq!(AuthHeader::basic("admin".into(), "pw".into()).username(), "admin");
+        assert_eq!(
+            AuthHeader::basic("admin".into(), "pw".into()).username(),
+            "admin"
+        );
     }
 }

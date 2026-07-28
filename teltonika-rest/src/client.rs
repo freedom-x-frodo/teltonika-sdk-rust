@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 use teltonika_core::config::ConnConfig;
 use teltonika_core::{Result, TeltonikaError};
 
-use crate::auth::{login, AuthCredentials, AuthHeader, AuthType};
+use crate::auth::{AuthCredentials, AuthHeader, AuthType, login};
 use crate::error::from_reqwest;
 use crate::response::Envelope;
 
@@ -71,7 +71,13 @@ impl RestClient {
     }
 
     async fn refresh_if_stale(&self) -> Result<()> {
-        if !self.inner.auth.read().await.is_stale(self.inner.refresh_margin) {
+        if !self
+            .inner
+            .auth
+            .read()
+            .await
+            .is_stale(self.inner.refresh_margin)
+        {
             return Ok(());
         }
 
@@ -149,7 +155,9 @@ mod tests {
     }
 
     #[derive(serde::Deserialize, Debug)]
-    struct Probe { value: u32 }
+    struct Probe {
+        value: u32,
+    }
 
     async fn config_for(server: &MockServer) -> ConnConfig {
         ConnConfig::new("admin".into(), "pw".into(), server.uri())
@@ -158,29 +166,37 @@ mod tests {
     #[tokio::test]
     async fn login_401_reports_username() {
         let server = MockServer::start().await;
-        Mock::given(method("POST")).and(path("/api/login"))
+        Mock::given(method("POST"))
+            .and(path("/api/login"))
             .respond_with(ResponseTemplate::new(401))
-            .mount(&server).await;
+            .mount(&server)
+            .await;
 
         let err = RestClient::connect(config_for(&server).await, AuthType::Session)
-            .await.unwrap_err();
+            .await
+            .unwrap_err();
         assert!(matches!(err, TeltonikaError::AuthFailed { username } if username == "admin"));
     }
 
     #[tokio::test]
     async fn basic_auth_never_logs_in() {
         let server = MockServer::start().await;
-        Mock::given(method("POST")).and(path("/api/login"))
+        Mock::given(method("POST"))
+            .and(path("/api/login"))
             .respond_with(ResponseTemplate::new(200))
             .expect(0)
-            .mount(&server).await;
-        Mock::given(method("GET")).and(path("/api/probe"))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/probe"))
             .and(header("authorization", "Basic YWRtaW46cHc="))
             .respond_with(ResponseTemplate::new(200).set_body_json(data_body()))
-            .mount(&server).await;
+            .mount(&server)
+            .await;
 
         let client = RestClient::connect(config_for(&server).await, AuthType::Basic)
-            .await.unwrap();
+            .await
+            .unwrap();
         let out: Probe = client.get("/probe").await.unwrap();
         assert_eq!(out.value, 1);
     }
@@ -188,17 +204,22 @@ mod tests {
     #[tokio::test]
     async fn basic_auth_401_fails_without_retry() {
         let server = MockServer::start().await;
-        Mock::given(method("POST")).and(path("/api/login"))
+        Mock::given(method("POST"))
+            .and(path("/api/login"))
             .respond_with(ResponseTemplate::new(200))
             .expect(0)
-            .mount(&server).await;
-        Mock::given(method("GET")).and(path("/api/probe"))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/probe"))
             .respond_with(ResponseTemplate::new(401))
             .expect(1)
-            .mount(&server).await;
+            .mount(&server)
+            .await;
 
         let client = RestClient::connect(config_for(&server).await, AuthType::Basic)
-            .await.unwrap();
+            .await
+            .unwrap();
         let err = client.get::<Probe>("/probe").await.unwrap_err();
         assert!(matches!(err, TeltonikaError::AuthFailed { .. }));
     }
@@ -206,29 +227,39 @@ mod tests {
     #[tokio::test]
     async fn reactive_401_refreshes_and_retries_once() {
         let server = MockServer::start().await;
-        Mock::given(method("POST")).and(path("/api/login"))
+        Mock::given(method("POST"))
+            .and(path("/api/login"))
             .respond_with(ResponseTemplate::new(200).set_body_json(login_body("t1", 300)))
-            .up_to_n_times(1).expect(1)
-            .mount(&server).await;
-        Mock::given(method("POST")).and(path("/api/login"))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/api/login"))
             .respond_with(ResponseTemplate::new(200).set_body_json(login_body("t2", 300)))
             .expect(1)
-            .mount(&server).await;
+            .mount(&server)
+            .await;
 
         // First GET rejects the stale token, second accepts the fresh one.
-        Mock::given(method("GET")).and(path("/api/probe"))
+        Mock::given(method("GET"))
+            .and(path("/api/probe"))
             .and(header("authorization", "Bearer t1"))
             .respond_with(ResponseTemplate::new(401))
             .expect(1)
-            .mount(&server).await;
-        Mock::given(method("GET")).and(path("/api/probe"))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/probe"))
             .and(header("authorization", "Bearer t2"))
             .respond_with(ResponseTemplate::new(200).set_body_json(data_body()))
             .expect(1)
-            .mount(&server).await;
+            .mount(&server)
+            .await;
 
         let client = RestClient::connect(config_for(&server).await, AuthType::Session)
-            .await.unwrap();
+            .await
+            .unwrap();
         let out: Probe = client.get("/probe").await.unwrap();
         assert_eq!(out.value, 1);
     }
@@ -236,17 +267,22 @@ mod tests {
     #[tokio::test]
     async fn persistent_401_gives_up_after_one_retry() {
         let server = MockServer::start().await;
-        Mock::given(method("POST")).and(path("/api/login"))
+        Mock::given(method("POST"))
+            .and(path("/api/login"))
             .respond_with(ResponseTemplate::new(200).set_body_json(login_body("t", 300)))
             .expect(2) // connect + one refresh
-            .mount(&server).await;
-        Mock::given(method("GET")).and(path("/api/probe"))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/probe"))
             .respond_with(ResponseTemplate::new(401))
             .expect(2) // original + retry, no loop
-            .mount(&server).await;
+            .mount(&server)
+            .await;
 
         let client = RestClient::connect(config_for(&server).await, AuthType::Session)
-            .await.unwrap();
+            .await
+            .unwrap();
         assert!(matches!(
             client.get::<Probe>("/probe").await.unwrap_err(),
             TeltonikaError::AuthFailed { .. }
@@ -257,39 +293,53 @@ mod tests {
     async fn proactive_refresh_fires_before_request() {
         let server = MockServer::start().await;
         // expires: 0 => stale the instant connect returns.
-        Mock::given(method("POST")).and(path("/api/login"))
+        Mock::given(method("POST"))
+            .and(path("/api/login"))
             .respond_with(ResponseTemplate::new(200).set_body_json(login_body("t", 0)))
             .expect(2) // connect, then proactive refresh on first get
-            .mount(&server).await;
-        Mock::given(method("GET")).and(path("/api/probe"))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/probe"))
             .respond_with(ResponseTemplate::new(200).set_body_json(data_body()))
             .expect(1)
-            .mount(&server).await;
+            .mount(&server)
+            .await;
 
         let client = RestClient::connect(config_for(&server).await, AuthType::Session)
-            .await.unwrap();
+            .await
+            .unwrap();
         let _: Probe = client.get("/probe").await.unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn concurrent_proactive_refresh_logs_in_once() {
         let server = MockServer::start().await;
-        Mock::given(method("POST")).and(path("/api/login"))
+        Mock::given(method("POST"))
+            .and(path("/api/login"))
             .respond_with(ResponseTemplate::new(200).set_body_json(login_body("t", 0)))
-            .up_to_n_times(1).expect(1)
-            .mount(&server).await;
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
         // Second and later logins return a long-lived token; if the
         // double-checked lock is broken this mock gets hit and the count fails.
-        Mock::given(method("POST")).and(path("/api/login"))
+        Mock::given(method("POST"))
+            .and(path("/api/login"))
             .respond_with(ResponseTemplate::new(200).set_body_json(login_body("t2", 600)))
             .expect(1)
-            .mount(&server).await;
-        Mock::given(method("GET")).and(path("/api/probe"))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/probe"))
             .respond_with(ResponseTemplate::new(200).set_body_json(data_body()))
-            .mount(&server).await;
+            .mount(&server)
+            .await;
 
         let client = StdArc::new(
-            RestClient::connect(config_for(&server).await, AuthType::Session).await.unwrap(),
+            RestClient::connect(config_for(&server).await, AuthType::Session)
+                .await
+                .unwrap(),
         );
         let mut handles = Vec::new();
         for _ in 0..8 {
@@ -305,19 +355,25 @@ mod tests {
         let server = MockServer::start().await;
 
         // 5min TTL against a 20min margin.
-        Mock::given(method("POST")).and(path("/api/login"))
+        Mock::given(method("POST"))
+            .and(path("/api/login"))
             .respond_with(ResponseTemplate::new(200).set_body_json(login_body("t", 300)))
             .expect(4) // connect + one per get, not more
-            .mount(&server).await;
-        Mock::given(method("GET")).and(path("/api/probe"))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/probe"))
             .respond_with(ResponseTemplate::new(200).set_body_json(data_body()))
             .expect(3)
-            .mount(&server).await;
+            .mount(&server)
+            .await;
 
         let config = ConnConfig::new("admin".into(), "pw".into(), server.uri())
             .with_refresh_margin(Duration::from_secs(20 * 60));
 
-        let client = RestClient::connect(config, AuthType::Session).await.unwrap();
+        let client = RestClient::connect(config, AuthType::Session)
+            .await
+            .unwrap();
         for _ in 0..3 {
             let _: Probe = client.get("/probe").await.unwrap();
         }

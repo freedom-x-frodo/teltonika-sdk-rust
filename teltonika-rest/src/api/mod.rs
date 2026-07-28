@@ -1,7 +1,7 @@
 use crate::client::RestClient;
 
-pub mod system;
 pub mod modems;
+pub mod system;
 
 impl RestClient {
     pub fn system(&self) -> system::SystemApi<'_> {
