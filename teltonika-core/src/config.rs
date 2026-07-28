@@ -3,17 +3,17 @@ use std::time::Duration;
 pub struct ConnConfig {
     pub username: String,
     pub password: String,
-    pub ip: String,
+    pub endpoint: String,
     pub accept_invalid_certs: bool,
-    pub refresh_margin: Duration, //expiration time renewal for session login
+    pub refresh_margin: Duration,
 }
 
 impl ConnConfig {
-    pub fn new(username: String, password: String, ip: String) -> Self {
+    pub fn new(username: String, password: String, endpoint: String) -> Self {
         Self {
             username,
             password,
-            ip,
+            endpoint: endpoint.trim_end_matches('/').to_string(),
             accept_invalid_certs: true,
             refresh_margin: Duration::from_secs(30),
         }

@@ -10,11 +10,11 @@ use teltonika_rest::client::RestClient;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let host = env::var("RUTX_HOST")?;
+    let endpoint = env::var("RUTX_URL")?;
     let user = env::var("RUTX_USER")?;
     let pass = env::var("RUTX_PASS")?;
 
-    let config = ConnConfig::new(user, pass, host);
+    let config = ConnConfig::new(user, pass, endpoint);
     let client = RestClient::connect(config, AuthType::Session).await?;
 
     let modems = client.modems().status().await?;

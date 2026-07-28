@@ -36,7 +36,7 @@ impl RestClient {
             .build()
             .map_err(from_reqwest)?;
 
-        let base_url = format!("https://{}", config.ip);
+        let base_url = config.endpoint;
         let refresh_margin = config.refresh_margin;
 
         let auth = match auth_type {
