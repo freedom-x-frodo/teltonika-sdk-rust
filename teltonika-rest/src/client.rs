@@ -39,8 +39,8 @@ struct ClientInner {
 impl RestClient {
     pub async fn connect(config: ConnConfig, auth_type: AuthType) -> Result<Self> {
         let http = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(15))
+            .connect_timeout(config.connect_timeout)
+            .timeout(config.request_timeout)
             .danger_accept_invalid_certs(config.accept_invalid_certs)
             .build()
             .map_err(from_reqwest)?;
