@@ -41,12 +41,12 @@ coding.
 
 ## 2. Blocking / parallel work
 
-- **Token re-auth.** Session token expires after 5 minutes.
-  `RwLock<AuthState>` + retry-once-on-401, storing credentials for re-login;
-  `GET /session/status` (`{active, username, group}`) as the probe. Also
-  replaces the stubbed 401 branch in `get()`, which currently returns
-  `AuthFailed` with an empty username — wrong story for an expiry.
-  **Prerequisite for everything in §4.**
+~~- **Token re-auth.** Session token expires after 5 minutes.~~
+  ~~`RwLock<AuthState>` + retry-once-on-401, storing credentials for re-login;~~
+  ~~`GET /session/status` (`{active, username, group}`) as the probe. Also~~
+  ~~replaces the stubbed 401 branch in `get()`, which currently returns~~
+  ~~`AuthFailed` with an empty username — wrong story for an expiry.~~
+  ~~**Prerequisite for everything in §4.**~~~
 - ~~**Vendor the spec** into `specs/` so firmware bumps become reviewable diffs.~~
 
 ## 3. Deferred: write-path features
