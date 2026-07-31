@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+#[derive(Clone)]
 pub struct ConnConfig {
     pub username: String,
     pub password: String,
